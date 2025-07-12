@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+WEB3_SETUP_GUIDE.md
+IMPLEMENTATION_CHANGELOG.md

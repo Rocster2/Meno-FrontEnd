@@ -12,7 +12,13 @@
     "next": "15.3.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-icons": "^5.5.0"
+    "react-icons": "^5.5.0",
+    "@web3modal/wagmi": "^4.1.8",
+    "@web3modal/siwe": "^4.1.8",
+    "wagmi": "^2.5.12",
+    "viem": "^2.7.13",
+    "@tanstack/react-query": "^5.24.8",
+    "siwe": "^2.1.4"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
