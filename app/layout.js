@@ -1,5 +1,7 @@
 import "./globals.css";
 import Web3Provider from '../components/Web3Provider';
+import { ServiceProvider } from '../contexts/ServiceContext';
+import TransactionStatusIndicator from '../components/TransactionStatusIndicator';
 
 export const metadata = {
    title: "Meno - NFT Marketplace",
@@ -11,7 +13,10 @@ export default function RootLayout({ children }) {
       <html lang="en">
          <body className="bg-neutral text-white">
             <Web3Provider>
-               {children}
+               <ServiceProvider>
+                  {children}
+                  <TransactionStatusIndicator />
+               </ServiceProvider>
             </Web3Provider>
          </body>
       </html>

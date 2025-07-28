@@ -1,0 +1,169 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # MENO NFT OFF-RAMP APPLICATION
+  # ===========================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_DEPLOYMENT_ENV: ${NEXT_PUBLIC_DEPLOYMENT_ENV:-testnet}
+        NEXT_PUBLIC_PROJECT_ID: ${NEXT_PUBLIC_PROJECT_ID}
+        NEXT_PUBLIC_MORPH_MAINNET_RPC: ${NEXT_PUBLIC_MORPH_MAINNET_RPC}
+        NEXT_PUBLIC_MORPH_TESTNET_RPC: ${NEXT_PUBLIC_MORPH_TESTNET_RPC}
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_DEPLOYMENT_ENV=${NEXT_PUBLIC_DEPLOYMENT_ENV:-testnet}
+      - NEXT_PUBLIC_PROJECT_ID=${NEXT_PUBLIC_PROJECT_ID}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - meno-network
+    restart: unless-stopped
+
+  # ===========================================
+  # POSTGRESQL DATABASE
+  # ===========================================
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: meno_nft_offramp
+      POSTGRES_USER: meno_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-meno_secure_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - meno-network
+    restart: unless-stopped
+
+  # ===========================================
+  # REDIS CACHE
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - meno-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # ===========================================
+  # TESTNET ENVIRONMENT (DEVELOPMENT)
+  # ===========================================
+  app-testnet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_DEPLOYMENT_ENV: testnet
+        NEXT_PUBLIC_PROJECT_ID: ${NEXT_PUBLIC_PROJECT_ID}
+        NEXT_PUBLIC_MORPH_TESTNET_RPC: ${NEXT_PUBLIC_MORPH_TESTNET_RPC}
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_DEPLOYMENT_ENV=testnet
+      - NEXT_PUBLIC_PROJECT_ID=${NEXT_PUBLIC_PROJECT_ID}
+      - DATABASE_URL=${DATABASE_URL_TESTNET}
+      - REDIS_URL=${REDIS_URL_TESTNET}
+    depends_on:
+      - postgres-testnet
+      - redis-testnet
+    networks:
+      - meno-network
+    restart: unless-stopped
+    profiles:
+      - testnet
+
+  postgres-testnet:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: meno_nft_offramp_testnet
+      POSTGRES_USER: meno_user_testnet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_TESTNET:-meno_testnet_password}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_testnet_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - meno-network
+    restart: unless-stopped
+    profiles:
+      - testnet
+
+  redis-testnet:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_testnet_data:/data
+    networks:
+      - meno-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    profiles:
+      - testnet
+
+  # ===========================================
+  # MONITORING AND OBSERVABILITY
+  # ===========================================
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - meno-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3002:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - meno-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+# ===========================================
+# NETWORKS
+# ===========================================
+networks:
+  meno-network:
+    driver: bridge
+
+# ===========================================
+# VOLUMES
+# ===========================================
+volumes:
+  postgres_data:
+  redis_data:
+  postgres_testnet_data:
+  redis_testnet_data:
+  prometheus_data:
+  grafana_data:

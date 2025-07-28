@@ -29,6 +29,16 @@ export default function Nav() {
 
             {/* Actions */}
             <div className="flex items-center gap-4">
+               {isConnected && (
+                  <a
+                     href="/dashboard"
+                     className="hidden md:inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                  >
+                     <User className="w-4 h-4" />
+                     <span>Dashboard</span>
+                  </a>
+               )}
+               
                <button
                   className={`hidden md:inline-flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all duration-200 ${
                      isConnected
@@ -67,6 +77,18 @@ export default function Nav() {
                <div className="absolute top-full left-0 right-0 bg-neutral-950 border-b border-gray-800 md:hidden z-40">
                   <div className="p-4 space-y-4">
                      <SearchBar />
+                     
+                     {isConnected && (
+                        <a
+                           href="/dashboard"
+                           className="w-full flex items-center gap-2 px-4 py-3 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                           onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                           <User className="w-4 h-4" />
+                           <span>Dashboard</span>
+                        </a>
+                     )}
+                     
                      <button
                         onClick={() => {
                            openModal();

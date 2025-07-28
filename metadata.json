@@ -1,0 +1,6 @@
+{
+    "name": "My Morph NFT",
+    "description": "First NFT on Morph Testnet!",
+    "image": "ipfs://bafybeific6exbtk6gm5wqtgqms4bcbncqqywcad7oiugwblgaah3wfivvi", 
+    "attributes": [{"trait_type": "Rarity", "value": "Legendary"}]
+  }

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Test</title>
+</head>
+<body>
+    <h1>Debug Test</h1>
+    <div id="result"></div>
+    
+    <script>
+        // Test the RPC connection directly
+        async function testRPC() {
+            const result = document.getElementById('result');
+            result.innerHTML = 'Testing RPC connection...';
+            
+            try {
+                const response = await fetch('https://rpc-quicknode-holesky.morphl2.io', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'eth_blockNumber',
+                        params: [],
+                        id: 1
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.result) {
+                    result.innerHTML = `✅ RPC Working! Block: ${parseInt(data.result, 16)}`;
+                } else {
+                    result.innerHTML = `❌ RPC Error: ${JSON.stringify(data)}`;
+                }
+            } catch (error) {
+                result.innerHTML = `❌ Error: ${error.message}`;
+            }
+        }
+        
+        // Run test on page load
+        testRPC();
+    </script>
+</body>
+</html>
