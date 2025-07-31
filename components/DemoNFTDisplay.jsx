@@ -3,12 +3,18 @@
 import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import DemoNFTService from '../lib/services/DemoNFTService';
+import NFTListingForm from './NFTListingForm';
+
+import StepByStepOffRampModal from './StepByStepOffRampModal';
 
 const DemoNFTDisplay = () => {
   const { address, isConnected } = useAccount();
   const [demoData, setDemoData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showListingForm, setShowListingForm] = useState(false);
+
+  const [showStepByStepOffRamp, setShowStepByStepOffRamp] = useState(false);
 
   useEffect(() => {
     const loadDemoNFT = async () => {
@@ -58,8 +64,7 @@ const DemoNFTDisplay = () => {
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your demo NFT...</p>
-          <p className="text-xs text-gray-400 mt-2">Contract: {process.env.NEXT_PUBLIC_DEMO_NFT_CONTRACT_ADDRESS}</p>
+          <p className="text-gray-600">Loading NFTs...</p>
         </div>
       </div>
     );
@@ -124,7 +129,7 @@ const DemoNFTDisplay = () => {
       <div className="bg-gradient-to-r from-purple-600 to-blue-600 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-white">🎯 Hackathon Demo NFT</h2>
+            <h2 className="text-xl font-bold text-white">{nft?.name || 'Demo NFT'}</h2>
             <p className="text-purple-100 text-sm">Deployed on Morph Holesky Testnet</p>
           </div>
           <div className="bg-white/20 rounded-full px-3 py-1">
@@ -164,18 +169,23 @@ const DemoNFTDisplay = () => {
             )}
 
             {/* Action Buttons */}
-            <div className="flex space-x-3">
-              <a
-                href={nft.explorerUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg text-center text-sm font-medium hover:bg-blue-700 transition-colors"
-              >
-                View on Explorer
-              </a>
-              <button className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
-                List for Sale
-              </button>
+            <div className="space-y-3">
+              <div className="flex space-x-3">
+                <a
+                  href={nft.explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg text-center text-sm font-medium hover:bg-blue-700 transition-colors"
+                >
+                  View on Explorer
+                </a>
+                <button 
+                  onClick={() => setShowStepByStepOffRamp(true)}
+                  className="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
+                >
+                  Off-ramp
+                </button>
+              </div>
             </div>
           </div>
 
@@ -251,6 +261,53 @@ const DemoNFTDisplay = () => {
           </div>
         </div>
       </div>
+
+      {/* NFT Listing Form Modal */}
+      {showListingForm && (
+        <NFTListingForm
+          nft={nft ? {
+            id: nft.id,
+            name: nft.name,
+            description: nft.description,
+            image: nft.image,
+            contractAddress: nft.collection.address,
+            tokenId: nft.tokenId,
+            collection: nft.collection.name,
+            owner: nft.owner,
+            network: nft.network
+          } : null}
+          isOpen={showListingForm}
+          onClose={() => setShowListingForm(false)}
+          onSuccess={(result) => {
+            console.log('NFT listed successfully:', result);
+            // The NFTListingForm will handle the success notification
+            // Optionally refresh the NFT data to show updated status
+            // loadDemoNFT();
+          }}
+        />
+      )}
+
+
+
+      {/* Step-by-Step Off-ramp Modal */}
+      {showStepByStepOffRamp && (
+        <StepByStepOffRampModal
+          nft={nft ? {
+            id: nft.id,
+            name: nft.name,
+            realName: nft.name, // Use real name from metadata
+            description: nft.description,
+            image: nft.image,
+            contractAddress: nft.collection.address,
+            tokenId: nft.tokenId,
+            collection: nft.collection.name,
+            owner: nft.owner,
+            network: nft.network
+          } : null}
+          isOpen={showStepByStepOffRamp}
+          onClose={() => setShowStepByStepOffRamp(false)}
+        />
+      )}
     </div>
   );
 };

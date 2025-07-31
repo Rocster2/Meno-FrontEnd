@@ -1,7 +1,6 @@
 "use client";
 
-import { useAccount, useDisconnect } from 'wagmi'
-import { useWeb3Modal } from '@web3modal/wagmi/react'
+import { useAccount, useDisconnect, useConnect } from 'wagmi'
 import Modal from "../Modal";
 import { Wallet, LogOut, User, Copy, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
@@ -9,11 +8,16 @@ import { useState } from 'react';
 export default function LoginModal({ isOpen, onClose }) {
    const { address, isConnected, chainId } = useAccount()
    const { disconnect } = useDisconnect()
-   const { open } = useWeb3Modal()
+   const { connect, connectors, isPending } = useConnect()
    const [copied, setCopied] = useState(false)
 
-   const handleConnect = async () => {
-      await open()
+   const handleConnect = async (connector) => {
+      try {
+         await connect({ connector })
+         onClose()
+      } catch (error) {
+         console.error('Connection failed:', error)
+      }
    }
 
    const handleDisconnect = async () => {
@@ -65,17 +69,23 @@ export default function LoginModal({ isOpen, onClose }) {
                   </p>
                   
                   <div className="space-y-3">
-                     {/* Web3Modal Connect Button */}
-                     <button
-                        onClick={handleConnect}
-                        className="wallet-button flex items-center gap-3 justify-center group">
-                        <Wallet className="w-5 h-5 text-menoGreen" />
-                        <span>Connect Wallet</span>
-                     </button>
+                     {/* Available Connectors */}
+                     {connectors.map((connector) => (
+                        <button
+                           key={connector.uid}
+                           onClick={() => handleConnect(connector)}
+                           disabled={isPending}
+                           className="wallet-button flex items-center gap-3 justify-center group disabled:opacity-50 disabled:cursor-not-allowed">
+                           <Wallet className="w-5 h-5 text-menoGreen" />
+                           <span>
+                              {isPending ? 'Connecting...' : `Connect ${connector.name}`}
+                           </span>
+                        </button>
+                     ))}
 
                      <div className="text-center text-sm text-gray-400">
-                        <p>Supports 300+ wallets including:</p>
-                        <p className="text-menoGreen">MetaMask • Coinbase • Email • Google • Apple</p>
+                        <p>Connect your wallet to access Meno</p>
+                        <p className="text-menoGreen">Secure • Fast • Decentralized</p>
                      </div>
                   </div>
                </div>
@@ -124,13 +134,6 @@ export default function LoginModal({ isOpen, onClose }) {
 
                   {/* Actions */}
                   <div className="space-y-3">
-                     <button
-                        onClick={handleConnect}
-                        className="wallet-button flex items-center gap-3 justify-center">
-                        <Wallet className="w-5 h-5" />
-                        <span>Wallet Settings</span>
-                     </button>
-
                      <button
                         onClick={handleDisconnect}
                         className="wallet-button bg-red-600 hover:bg-red-700 flex items-center gap-3 justify-center">

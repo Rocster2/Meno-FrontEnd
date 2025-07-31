@@ -7,7 +7,6 @@ import NFTGrid from './NFTGrid'
 import TransactionMonitor from './TransactionMonitor'
 import TransactionRetryModal from './TransactionRetryModal'
 import DemoNFTDisplay from './DemoNFTDisplay'
-import DebugNFT from './DebugNFT'
 
 /**
  * User Dashboard Component
@@ -198,7 +197,6 @@ export default function UserDashboard() {
       <div className="px-4 md:px-6 lg:px-12 py-8">
         {activeTab === 'demo' && (
           <div className="space-y-6">
-            <DebugNFT />
             <DemoNFTDisplay />
           </div>
         )}

@@ -1,74 +1,69 @@
-"use client";
-import { useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+'use client';
 
-export default function Modal({ isOpen, onClose, title, children }) {
-   useEffect(() => {
-      if (isOpen) {
-         document.body.style.overflow = "hidden";
-      } else {
-         document.body.style.overflow = "unset";
+import { useEffect } from 'react';
+
+/**
+ * Reusable Modal Component
+ * Provides a centered modal overlay with backdrop click to close
+ */
+export default function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md' }) {
+  // Handle escape key press
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
       }
+    };
 
-      return () => {
-         document.body.style.overflow = "unset";
-      };
-   }, [isOpen]);
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden';
+    }
 
-   useEffect(() => {
-      const handleEscape = (e) => {
-         if (e.key === "Escape") {
-            onClose();
-         }
-      };
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, onClose]);
 
-      if (isOpen) {
-         document.addEventListener("keydown", handleEscape);
-      }
+  if (!isOpen) return null;
 
-      return () => {
-         document.removeEventListener("keydown", handleEscape);
-      };
-   }, [isOpen, onClose]);
-
-   return (
-      <AnimatePresence>
-         {isOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center">
-               {/* Backdrop */}
-               <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={onClose}
-                  className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-               />
-
-               {/* Modal */}
-               <motion.div
-                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                  className="relative bg-gray-900 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl border border-gray-800">
-                  {/* nav */}
-                  <div className="flex items-center justify-between mb-6">
-                     <h2 className="text-xl font-semibold text-white">
-                        {title}
-                     </h2>
-                     <button
-                        onClick={onClose}
-                        className="text-gray-400 hover:text-white transition-colors p-1"
-                        aria-label="Close modal">
-                        <X className="w-5 h-5" />
-                     </button>
-                  </div>
-
-                  {/* Content */}
-                  {children}
-               </motion.div>
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      {/* Backdrop */}
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+        onClick={onClose}
+      />
+      
+      {/* Modal */}
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div 
+          className={`relative w-full ${maxWidth} transform rounded-lg bg-white shadow-xl transition-all`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          {title && (
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-         )}
-      </AnimatePresence>
-   );
+          )}
+          
+          {/* Content */}
+          <div className="px-6 py-4">
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

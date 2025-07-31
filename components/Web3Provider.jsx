@@ -13,7 +13,14 @@ import {
   getDeploymentEnvironment 
 } from '../lib/network-config'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
 
 // Network Status Component
 function NetworkStatus() {
@@ -123,32 +130,13 @@ function NetworkStatus() {
   )
 }
 
-// Connection Status Component
+// Connection Status Component - Removed to clean up UI
 function ConnectionStatus() {
-  const { isConnected, isConnecting, isReconnecting } = useAccount()
-  const [showStatus, setShowStatus] = useState(false)
-  
-  useEffect(() => {
-    if (isConnecting || isReconnecting) {
-      setShowStatus(true)
-      const timer = setTimeout(() => setShowStatus(false), 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [isConnecting, isReconnecting])
-  
-  if (!showStatus) return null
-  
-  return (
-    <div className="fixed bottom-4 right-4 z-50">
-      <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg border border-blue-200 flex items-center space-x-2">
-        <div className="animate-spin w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full" />
-        <span className="text-sm font-medium">
-          {isConnecting ? 'Connecting wallet...' : 'Reconnecting...'}
-        </span>
-      </div>
-    </div>
-  )
+  // Removed the reconnecting status display for cleaner UI
+  return null
 }
+
+
 
 // Enhanced Web3Provider with network management
 function EnhancedWeb3Provider({ children }) {

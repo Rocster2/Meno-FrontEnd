@@ -4,6 +4,11 @@ import { useState, useEffect } from 'react'
 import { useAccount } from 'wagmi'
 import { parseEther } from 'viem'
 import { useServices } from '../contexts/ServiceContext'
+import { useWalletClient, usePublicClient } from 'wagmi'
+import { ethers } from 'ethers'
+import MenoMarketplaceService from '../lib/services/MenoMarketplaceService'
+import NetworkStatusService from '../lib/services/NetworkStatusService'
+import TransactionProgress from './TransactionProgress'
 import Modal from './Modal'
 import PriceComparisonWidget from './PriceComparisonWidget'
 import OffRampConfiguration from './OffRampConfiguration'
@@ -15,6 +20,8 @@ import OffRampConfiguration from './OffRampConfiguration'
 export default function NFTListingForm({ nft, isOpen, onClose, onSuccess }) {
   const { address } = useAccount()
   const { services } = useServices()
+  const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient()
 
   // Form state
   const [formData, setFormData] = useState({
@@ -36,6 +43,9 @@ export default function NFTListingForm({ nft, isOpen, onClose, onSuccess }) {
 
   // Contract interaction state
   const [transactionHash, setTransactionHash] = useState(null)
+  const [showProgress, setShowProgress] = useState(false)
+  const [transactionStage, setTransactionStage] = useState('preparing')
+  const [transactionError, setTransactionError] = useState(null)
 
   // Load off-ramp providers on mount
   useEffect(() => {
@@ -157,55 +167,107 @@ export default function NFTListingForm({ nft, isOpen, onClose, onSuccess }) {
     }
 
     setLoading(true)
+    setShowProgress(true)
+    setTransactionStage('preparing')
+    setTransactionError(null)
 
     try {
-      // Create transaction request for the TransactionManager
-      const transactionRequest = {
-        type: 'nft_listing',
-        to: '0x1234567890123456789012345678901234567890', // Contract address - would be from config
-        from: address,
-        nftContract: nft?.contractAddress,
-        tokenId: nft?.tokenId,
-        price: parseEther(formData.price),
-        duration: parseInt(formData.duration) * 24 * 60 * 60, // Convert days to seconds
-        data: '0x', // Contract call data would be encoded here
-        metadata: {
+      console.log('Starting NFT listing process...')
+      console.log('NFT:', nft)
+      console.log('Form data:', formData)
+
+      // Check network status first
+      const networkService = new NetworkStatusService()
+      const networkStatus = await networkService.getNetworkStatus()
+      
+      console.log('Network status:', networkStatus)
+      
+      if (!networkStatus.isHealthy) {
+        throw new Error(`Network issue: ${networkStatus.error}`)
+      }
+      
+      if (networkStatus.status === 'poor') {
+        console.warn('Poor network conditions detected, but proceeding...')
+      }
+
+      // Create ethers provider and signer from wagmi
+      if (!walletClient || !publicClient) {
+        throw new Error('Wallet not connected')
+      }
+
+      // Convert wagmi clients to ethers
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+
+      // Initialize marketplace service
+      const marketplaceService = new MenoMarketplaceService()
+      await marketplaceService.initialize(provider, signer)
+
+      console.log('Marketplace service initialized')
+
+      // Set stage to signing
+      setTransactionStage('signing')
+
+      // Add timeout for the entire operation
+      const listingTimeout = 180000; // 3 minutes total timeout
+      
+      const result = await Promise.race([
+        marketplaceService.listNFT(
+          nft.contractAddress,
+          nft.tokenId,
+          formData.price,
+          parseInt(formData.duration),
+          formData.fiatOffRampEnabled,
+          {
+            onTransactionSent: (hash) => {
+              console.log('Transaction sent:', hash)
+              setTransactionHash(hash)
+              setTransactionStage('confirming')
+            }
+          }
+        ),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Listing operation timed out. Please try again with higher gas price.')), listingTimeout)
+        )
+      ])
+
+      console.log('✅ NFT listing result:', result)
+      setTransactionHash(result.transactionHash)
+      
+      if (result.pending) {
+        setTransactionStage('pending')
+        // For pending transactions, still call success but with pending status
+        onSuccess?.({
+          transactionId: result.listingId,
+          transactionHash: result.transactionHash,
+          listingData: formData,
           nft,
-          formData,
-          marketplaces: formData.selectedMarketplaces,
-          fiatOffRampEnabled: formData.fiatOffRampEnabled
-        }
+          listingId: result.listingId,
+          pending: true,
+          message: result.message
+        })
+      } else {
+        setTransactionStage('success')
+        // Wait a moment to show success, then call success callback
+        setTimeout(() => {
+          onSuccess?.({
+            transactionId: result.listingId,
+            transactionHash: result.transactionHash,
+            listingData: formData,
+            nft,
+            listingId: result.listingId
+          })
+
+          // Close modal and progress
+          setShowProgress(false)
+          onClose()
+        }, 2000)
       }
-
-      // Execute transaction through TransactionManager
-      const result = await services.transactionManager.executeTransaction(transactionRequest)
-      setTransactionHash(result.hash)
-
-      console.log('✅ NFT listing transaction initiated:', result)
-
-      // Sync with external marketplaces if selected
-      if (formData.selectedMarketplaces.includes('morph')) {
-        await syncWithMorphMarketplace(result.hash)
-      }
-
-      // Setup fiat off-ramp if enabled
-      if (formData.fiatOffRampEnabled) {
-        await setupFiatOffRamp(result.hash)
-      }
-
-      // Success callback
-      onSuccess?.({
-        transactionId: result.transactionId,
-        transactionHash: result.hash,
-        listingData: formData,
-        nft
-      })
-
-      // Close modal
-      onClose()
 
     } catch (error) {
       console.error('Failed to create listing:', error)
+      setTransactionError(error.message)
+      setTransactionStage('error')
       setErrors({ submit: error.message })
     } finally {
       setLoading(false)
@@ -286,7 +348,7 @@ export default function NFTListingForm({ nft, isOpen, onClose, onSuccess }) {
           step="0.001"
           value={formData.price}
           onChange={(e) => handleInputChange('price', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white placeholder-gray-500"
           placeholder="0.00"
         />
         {errors.price && (
@@ -302,7 +364,7 @@ export default function NFTListingForm({ nft, isOpen, onClose, onSuccess }) {
         <select
           value={formData.duration}
           onChange={(e) => handleInputChange('duration', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
         >
           <option value="1">1 Day</option>
           <option value="3">3 Days</option>
@@ -330,7 +392,7 @@ export default function NFTListingForm({ nft, isOpen, onClose, onSuccess }) {
                 type="checkbox"
                 checked={formData.selectedMarketplaces.includes(marketplace.id)}
                 onChange={() => handleMarketplaceToggle(marketplace.id)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-400 rounded bg-white"
               />
               <span className="text-sm text-gray-700">{marketplace.name}</span>
               <span className="text-xs text-gray-500">({marketplace.fee} fee)</span>
@@ -349,7 +411,7 @@ export default function NFTListingForm({ nft, isOpen, onClose, onSuccess }) {
             type="checkbox"
             checked={formData.fiatOffRampEnabled}
             onChange={(e) => handleInputChange('fiatOffRampEnabled', e.target.checked)}
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-400 rounded bg-white"
           />
           <span className="text-sm font-medium text-gray-700">
             Enable Fiat Off-ramp
@@ -408,32 +470,32 @@ export default function NFTListingForm({ nft, isOpen, onClose, onSuccess }) {
       {/* Listing Summary */}
       <div className="bg-gray-50 p-4 rounded-lg space-y-3">
         <div className="flex justify-between">
-          <span className="text-sm text-gray-600">NFT:</span>
-          <span className="text-sm font-medium">{nft?.name}</span>
+          <span className="text-sm font-semibold text-gray-800">NFT:</span>
+          <span className="text-sm font-bold text-gray-900">{nft?.name}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-sm text-gray-600">Price:</span>
-          <span className="text-sm font-medium">{formData.price} ETH</span>
+          <span className="text-sm font-semibold text-gray-800">Price:</span>
+          <span className="text-sm font-bold text-gray-900">{formData.price} ETH</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-sm text-gray-600">Duration:</span>
-          <span className="text-sm font-medium">{formData.duration} days</span>
+          <span className="text-sm font-semibold text-gray-800">Duration:</span>
+          <span className="text-sm font-bold text-gray-900">{formData.duration} days</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-sm text-gray-600">Marketplaces:</span>
-          <span className="text-sm font-medium">
+          <span className="text-sm font-semibold text-gray-800">Marketplaces:</span>
+          <span className="text-sm font-bold text-gray-900">
             {formData.selectedMarketplaces.join(', ')}
           </span>
         </div>
         {formData.fiatOffRampEnabled && (
           <>
             <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Fiat Currency:</span>
-              <span className="text-sm font-medium">{formData.currency}</span>
+              <span className="text-sm font-semibold text-gray-800">Fiat Currency:</span>
+              <span className="text-sm font-bold text-gray-900">{formData.currency}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Off-ramp Provider:</span>
-              <span className="text-sm font-medium">
+              <span className="text-sm font-semibold text-gray-800">Off-ramp Provider:</span>
+              <span className="text-sm font-bold text-gray-900">
                 {formData.preferredProvider === 'auto' ? 'Auto-select' : formData.preferredProvider}
               </span>
             </div>
@@ -444,14 +506,14 @@ export default function NFTListingForm({ nft, isOpen, onClose, onSuccess }) {
       {/* Price Comparison */}
       {priceComparison && (
         <div>
-          <h4 className="text-sm font-medium text-gray-900 mb-2">Price Comparison</h4>
+          <h4 className="text-sm font-bold text-gray-900 mb-2">Price Comparison</h4>
           <div className="space-y-2">
             {Object.entries(priceComparison).map(([marketplace, data]) => (
-              <div key={marketplace} className="flex justify-between items-center p-2 bg-white rounded border">
-                <span className="text-sm capitalize">{marketplace}</span>
+              <div key={marketplace} className="flex justify-between items-center p-3 bg-white rounded border border-gray-300">
+                <span className="text-sm font-semibold text-gray-800 capitalize">{marketplace}</span>
                 <div className="text-right">
-                  <div className="text-sm font-medium">{data.price} ETH</div>
-                  <div className="text-xs text-gray-500">{data.fees} fee</div>
+                  <div className="text-sm font-bold text-gray-900">{data.price} ETH</div>
+                  <div className="text-xs font-medium text-gray-700">{data.fees} fee</div>
                 </div>
               </div>
             ))}
@@ -474,7 +536,7 @@ export default function NFTListingForm({ nft, isOpen, onClose, onSuccess }) {
     <div className="flex justify-between items-center pt-4 border-t">
       <button
         onClick={() => step > 1 ? setStep(step - 1) : onClose()}
-        className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+        className="px-4 py-2 text-sm font-semibold text-gray-800 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-md"
         disabled={loading}
       >
         {step > 1 ? 'Back' : 'Cancel'}
@@ -504,22 +566,45 @@ export default function NFTListingForm({ nft, isOpen, onClose, onSuccess }) {
           }
         }}
         disabled={loading}
-        className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50"
+        className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? 'Processing...' : step === 3 ? 'List NFT' : 'Next'}
+        {loading ? (
+          <div className="flex items-center space-x-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            <span>Processing...</span>
+          </div>
+        ) : (
+          step === 3 ? 'List NFT' : 'Next'
+        )}
       </button>
     </div>
   )
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="List NFT for Sale">
-      <div className="max-w-md mx-auto">
-        {step === 1 && renderStep1()}
-        {step === 2 && renderStep2()}
-        {step === 3 && renderStep3()}
+    <>
+      <Modal isOpen={isOpen} onClose={onClose} title="List NFT for Sale">
+        <div className="max-w-md mx-auto">
+          {step === 1 && renderStep1()}
+          {step === 2 && renderStep2()}
+          {step === 3 && renderStep3()}
 
-        {renderStepNavigation()}
-      </div>
-    </Modal>
+          {renderStepNavigation()}
+        </div>
+      </Modal>
+      
+      <TransactionProgress
+        isVisible={showProgress}
+        onClose={() => {
+          setShowProgress(false)
+          if (transactionStage === 'success' || transactionStage === 'error') {
+            onClose()
+          }
+        }}
+        stage={transactionStage}
+        transactionHash={transactionHash}
+        error={transactionError}
+        explorerUrl="https://explorer-holesky.morphl2.io"
+      />
+    </>
   )
 }
